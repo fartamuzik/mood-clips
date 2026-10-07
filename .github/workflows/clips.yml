@@ -15,12 +15,13 @@ permissions:
 jobs:
   bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       TG_TOKEN: ${{ secrets.TG_TOKEN }}
       TG_ALLOWED: ${{ secrets.TG_ALLOWED }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      HF_HOME: ${{ github.workspace }}/.hf
+      HF_HOME: ${{ github.workspace }}/.models/hf
+      TORCH_HOME: ${{ github.workspace }}/.models/torch
     steps:
       - uses: actions/checkout@v4
 
@@ -32,12 +33,14 @@ jobs:
         id: poll
         run: python bot.py poll
 
-      - name: Cache Whisper model
-        if: steps.poll.outputs.jobs == 'true' && env.GROQ_API_KEY == ''
+      - name: Cache models
+        if: steps.poll.outputs.jobs == 'true'
         uses: actions/cache@v4
         with:
-          path: .hf
-          key: whisper-${{ hashFiles('settings.json') }}
+          path: |
+            .models
+            ~/.cache/pip
+          key: models-v2
 
       - name: Install tools
         if: steps.poll.outputs.jobs == 'true'
@@ -45,6 +48,10 @@ jobs:
           which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
           pip install -q pillow
           if [ -z "$GROQ_API_KEY" ]; then pip install -q faster-whisper; fi
+          # выделение голоса из музыки (если не поставится — бот работает и без него)
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu \
+            && (pip install -q "demucs>=4.1" || pip install -q "git+https://github.com/adefossez/demucs") \
+            || echo "::warning::demucs не установился — тайминг будет по миксу"
 
       - name: Make clips
         if: steps.poll.outputs.jobs == 'true'
