@@ -1,0 +1,10 @@
+{
+  "font_size": 84,
+  "uppercase": false,
+  "dim": 0.25,
+  "max_len": 60,
+  "audio_start": 0,
+  "hashtags": "",
+  "language": "",
+  "whisper_model": "large-v3-turbo"
+}
