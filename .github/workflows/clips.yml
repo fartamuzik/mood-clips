@@ -1,0 +1,62 @@
+name: clip-bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: clip-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TG_TOKEN: ${{ secrets.TG_TOKEN }}
+      TG_ALLOWED: ${{ secrets.TG_ALLOWED }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HF_HOME: ${{ github.workspace }}/.hf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Telegram
+        id: poll
+        run: python bot.py poll
+
+      - name: Cache Whisper model
+        if: steps.poll.outputs.jobs == 'true' && env.GROQ_API_KEY == ''
+        uses: actions/cache@v4
+        with:
+          path: .hf
+          key: whisper-${{ hashFiles('settings.json') }}
+
+      - name: Install tools
+        if: steps.poll.outputs.jobs == 'true'
+        run: |
+          which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          pip install -q pillow
+          if [ -z "$GROQ_API_KEY" ]; then pip install -q faster-whisper; fi
+
+      - name: Make clips
+        if: steps.poll.outputs.jobs == 'true'
+        run: python bot.py run
+
+      - name: Save backgrounds
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain -- backgrounds.json)" ]; then
+            git config user.name "clip-bot"
+            git config user.email "clip-bot@users.noreply.github.com"
+            git add backgrounds.json
+            git commit -q -m "update backgrounds"
+            git push -q
+          fi
