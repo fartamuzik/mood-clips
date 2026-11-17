@@ -34,6 +34,7 @@ import uuid
 from pathlib import Path
 
 import clip
+import publish
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOKEN = os.environ.get("TG_TOKEN", "").strip()
@@ -65,6 +66,9 @@ HELP = (
     "Эффекты: глитч, мерцание, пульс (качает под бит), печать, плавно, без эффекта, "
     "случайно (с числом клипов — у каждого свой).\n"
     "Шрифты: рукописный, каллиграфия, элегантный, жирный (если не написать — подберу под эффект).\n\n"
+    "📤 Выложить клип в TikTok и Instagram — ответь на него словом: пост\n"
+    "Своя подпись: пост текст подписи. Только в одну сеть: пост тт / пост инст.\n"
+    "Готовое видео — пришли его с подписью, которая начинается со слова пост.\n\n"
     "/bg — сколько фонов, /clearbg — удалить все фоны"
 )
 
@@ -191,6 +195,20 @@ class Item:
         self.text = m.get("text") or ""
         self.caption = m.get("caption") or ""
         self.kind, self.file = self._classify(m)
+        self.post = None            # (сети, подпись) для команды «пост»
+        own = message_video(m)
+        cmd = parse_post(self.caption if own else self.text)
+        if cmd is not None:
+            reply = m.get("reply_to_message") or {}
+            src = own or message_video(reply)
+            only, text = cmd
+            if own:
+                self.kind, self.file = "post", own
+                self.post = (only, text)
+            elif src or not text:
+                # ответ на клип; либо одно слово «пост» без ответа — подскажем, как надо
+                self.kind, self.file = "post", src
+                self.post = (only, text or stored_hook(reply.get("caption")))
 
     @staticmethod
     def _classify(m):
@@ -218,6 +236,50 @@ class Item:
 
     def allowed(self):
         return not ALLOWED or self.user in ALLOWED or self.user_id in ALLOWED
+
+
+POST_RE = re.compile(r"^\s*/?(пост|выложи|опубликуй|post)(?![\w])[\s:,.!—-]*(.*)$", re.I | re.S)
+NET_RE = re.compile(r"^(тт|тикток|тик-ток|tiktok|tt|инст|инста|инстаграм|instagram|ig|reels|рилс)(?![\w])[\s:,.!—-]*(.*)$",
+                    re.I | re.S)
+HOOK_MARK = "📝 "
+
+
+def message_video(m):
+    """Видео из сообщения (обычное или файлом) либо None."""
+    if not m:
+        return None
+    if m.get("video"):
+        return m["video"]
+    doc = m.get("document")
+    if doc:
+        name = (doc.get("file_name") or "").lower()
+        mime = (doc.get("mime_type") or "").lower()
+        if mime.startswith("video/") or name.endswith(clip.VIDEO_EXT):
+            return doc
+    return None
+
+
+def parse_post(text):
+    """«пост инст моя подпись» → (["instagram"], "моя подпись"); не команда → None."""
+    m = POST_RE.match(text or "")
+    if not m:
+        return None
+    rest = m.group(2).strip()
+    only = None
+    n = NET_RE.match(rest)
+    if n:
+        word = n.group(1).lower()
+        only = ["tiktok"] if word in ("тт", "тикток", "тик-ток", "tiktok", "tt") else ["instagram"]
+        rest = n.group(2).strip()
+    return only, rest
+
+
+def stored_hook(caption):
+    """Подпись, которую бот сам приписал к клипу строкой «📝 …»."""
+    for line in (caption or "").split("\n"):
+        if line.startswith(HOOK_MARK):
+            return line[len(HOOK_MARK):].strip()
+    return ""
 
 
 COUNT_RE = re.compile(r"^\s*[xх×]?\s*([1-9])\s*[xх×]?\s*(клип\w*)?\s*$", re.I)
@@ -458,6 +520,8 @@ def do_job(it, lyrics, count, cfg, stt, phrase=None):
                 cap += " · фраза: %s" % res["phrase_fx"]
             if count > 1:
                 cap = "Клип %d/%d · %s" % (k + 1, count, cap)
+            if hook:
+                cap += "\n" + HOOK_MARK + hook
             tg("sendVideo", {"chat_id": chat, "caption": cap, "supports_streaming": "true",
                              "width": cfg["width"], "height": cfg["height"]},
                files={"video": out}, timeout=300)
@@ -466,6 +530,8 @@ def do_job(it, lyrics, count, cfg, stt, phrase=None):
             say(chat, "Подпись для TikTok (нажми, чтобы скопировать):\n<code>%s</code>"
                 % (caption.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")),
                 html=True)
+        if publish.enabled():
+            say(chat, "📤 Выложить в TikTok и Instagram — ответь на нужный клип словом: пост")
         if not bgs:
             say(chat, "Фонов пока нет, поэтому фон — градиент. Пришли мне несколько видео.")
         weak = timing["mode"].startswith("равномерно") or timing["mode"].startswith("строки по паузам")
@@ -481,6 +547,48 @@ def do_job(it, lyrics, count, cfg, stt, phrase=None):
     except Exception as e:
         traceback.print_exc()
         say(chat, "Ошибка: %s" % str(e)[:300])
+    finally:
+        shutil.rmtree(jdir, ignore_errors=True)
+
+
+def do_post(it):
+    """Команда «пост»: выкладывает видео в TikTok и Instagram."""
+    chat = it.chat
+    f = it.file
+    only, caption = it.post
+    if not publish.enabled():
+        say(chat, "Публикация не настроена: добавь секрет ZERNIO_API_KEY "
+                  "(Settings → Secrets and variables → Actions).")
+        return
+    if not f:
+        say(chat, "Что выложить? Ответь словом «пост» на сообщение с клипом "
+                  "или пришли видео с подписью, которая начинается со слова «пост».")
+        return
+    if not caption:
+        say(chat, "У этого видео нет подписи. Ответь на него так: пост текст подписи")
+        return
+    if (f.get("file_size") or 0) > TG_DOWNLOAD_LIMIT:
+        say(chat, "Видео больше 20 МБ — Telegram не даёт боту его скачать. Пришли ролик поменьше.")
+        return
+    jdir = os.path.join(JOBS, "post%s" % it.uid)
+    shutil.rmtree(jdir, ignore_errors=True)
+    os.makedirs(jdir)
+    try:
+        say(chat, "📤 Выкладываю…")
+        path = download(f["file_id"], os.path.join(jdir, "clip.mp4"))
+        # метка: то же видео с той же подписью второй раз не уйдёт
+        key = hashlib.md5(("%s|%s|%s" % (f.get("file_unique_id") or f["file_id"], caption,
+                                         ",".join(only or []))).encode("utf-8")).hexdigest()
+        done = publish.publish(path, caption, settings(), only=only, key=key)
+        say(chat, "✅ Отправлено: %s\nПодпись: %s\nРолик появится через 1–3 минуты."
+            % (" и ".join(done), caption))
+    except publish.PublishError as e:
+        say(chat, "Не выложил: %s" % e)
+    except TgError as e:
+        say(chat, "Не смог скачать видео из Telegram: %s" % e)
+    except Exception as e:
+        traceback.print_exc()
+        say(chat, "Ошибка при публикации: %s" % str(e)[:300])
     finally:
         shutil.rmtree(jdir, ignore_errors=True)
 
@@ -572,6 +680,9 @@ def process(mode):
             if now - it.date < DEFER_SEC:
                 return False        # вдруг трек ещё в пути
             say(it.chat, "Это похоже на текст. Пришли трек (mp3), а текст припева — в подписи к нему. /help")
+            confirm(it.uid)
+        elif it.kind == "post":
+            do_post(it)
             confirm(it.uid)
         elif it.kind == "video":
             add_background(it)

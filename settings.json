@@ -1,0 +1,27 @@
+{
+  "font": "OpenSans.ttf",
+  "font_size": 46,
+  "slant": 12,
+  "layout": "pairs",
+  "text_color": "#FAFAFA",
+  "second_color": "#F31B28",
+  "uppercase": false,
+  "dim": 0.25,
+  "grayscale": false,
+  "beat_cuts": true,
+  "cut_seconds": 2.0,
+  "bg_pool": 12,
+  "max_len": 30,
+  "pre_roll": 0.6,
+  "post_roll": 1.5,
+  "chorus_pick": "first",
+  "chorus_repeats": 1,
+  "hashtags": "",
+  "language": "",
+  "whisper_model": "large-v3-turbo",
+  "hashtags_instagram": "",
+  "zernio_accounts": {
+    "tiktok": "6afbec08f3cf16be7df0cb04",
+    "instagram": "6afbea5242573aa70fd31f39"
+  }
+}
