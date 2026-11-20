@@ -145,7 +145,8 @@
    "instagram_post": "6afed6c5f86f37a2370ea12a",
    "instagram_at": "2026-11-20T20:09:00+03:00",
    "tiktok_day": "2026-11-20",
-   "plan_msg_id": 1331
+   "plan_msg_id": 1331,
+   "ig_checked": true
   },
   {
    "id": "t373014198-1",
@@ -181,7 +182,8 @@
    "instagram_post": "6afed7590166485a2eab08ce",
    "instagram_at": "2026-11-20T21:00:00+03:00",
    "tiktok_day": "2026-11-20",
-   "plan_msg_id": 1337
+   "plan_msg_id": 1337,
+   "ig_checked": true
   }
  ],
  "tracks": [
