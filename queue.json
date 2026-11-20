@@ -10,7 +10,8 @@
    "instagram_at": "2026-11-20T09:00:00+03:00",
    "tiktok_day": "2026-11-20",
    "tiktok_post": "6afed51ff128b24d08590ba7",
-   "plan_msg_id": 1313
+   "plan_msg_id": 1313,
+   "ig_checked": true
   },
   {
    "id": "t373014194-2",
@@ -44,7 +45,8 @@
    "instagram_at": "2026-11-20T09:51:00+03:00",
    "tiktok_day": "2026-11-20",
    "tiktok_post": "6afed5983c8b4b5bb474cdc0",
-   "plan_msg_id": 1319
+   "plan_msg_id": 1319,
+   "ig_checked": true
   },
   {
    "id": "t373014195-2",
@@ -263,5 +265,6 @@
    "note_id": 1304
   }
  ],
- "chat": 899857391
+ "chat": 899857391,
+ "short_alert": "2026-11-21"
 }
